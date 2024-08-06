@@ -1,10 +1,10 @@
+use crate::{PhysPage, FRAME_SIZE};
 use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
 use core::{
     fmt::{Debug, Formatter},
     ops::Range,
 };
 use page_table::MappingFlags;
-use crate::{FRAME_SIZE, PhysPage};
 
 #[derive(Debug)]
 pub enum VmAreaType {
@@ -17,6 +17,20 @@ impl VmAreaType {
         match self {
             VmAreaType::VmArea(vm_area) => vm_area.size(),
             VmAreaType::VmAreaEqual(vm_area_equal) => vm_area_equal.size(),
+        }
+    }
+
+    pub fn read_value_atomic(&self, addr: usize) -> usize {
+        match self {
+            VmAreaType::VmArea(vm_area) => vm_area.read_value_atomic(addr),
+            VmAreaType::VmAreaEqual(_) => panic!("read_value_atomic on VmAreaEqual"),
+        }
+    }
+
+    pub fn write_value_atomic(&mut self, addr: usize, value: usize) {
+        match self {
+            VmAreaType::VmArea(vm_area) => vm_area.write_value_atomic(addr, value),
+            VmAreaType::VmAreaEqual(_) => panic!("write_value_atomic on VmAreaEqual"),
         }
     }
 
@@ -118,7 +132,7 @@ impl VmArea {
         let mut current_start_address = addr;
         let mut data = data;
         for (va, pa) in self.map.iter_mut() {
-            if current_start_address >= *va && current_start_address < va + FRAME_SIZE {
+            if current_start_address >= *va && current_start_address < *va + FRAME_SIZE {
                 let offset = current_start_address - va;
                 let phy_buf = pa.as_mut_bytes();
                 let w_len = core::cmp::min(phy_buf.len() - offset, data.len());
@@ -136,7 +150,7 @@ impl VmArea {
         let mut start = addr;
         let mut data = data;
         for (va, pa) in self.map.iter() {
-            if start >= *va && start < va + FRAME_SIZE {
+            if start >= *va && start < *va + FRAME_SIZE {
                 let offset = start - va;
                 let phy_buf = pa.as_bytes();
                 let r_len = core::cmp::min(phy_buf.len() - offset, data.len());
@@ -148,6 +162,27 @@ impl VmArea {
                 start = va + FRAME_SIZE;
             }
         }
+    }
+
+    pub fn write_value_atomic(&mut self, addr: usize, value: usize) {
+        let current_start_address = addr;
+        for (va, page) in self.map.iter_mut() {
+            if current_start_address >= *va && current_start_address < *va + FRAME_SIZE {
+                let offset = current_start_address - va;
+                page.write_value_atomic(offset, value);
+            }
+        }
+    }
+
+    pub fn read_value_atomic(&self, addr: usize) -> usize {
+        let start = addr;
+        for (va, page) in self.map.iter() {
+            if start >= *va && start < *va + FRAME_SIZE {
+                let offset = start - va;
+                return page.read_value_atomic(offset);
+            }
+        }
+        panic!("read_value_atomic failed, address not found");
     }
 }
 

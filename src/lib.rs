@@ -13,12 +13,13 @@ use page_table::PagingResult;
 use pod::Pod;
 pub use space::VmSpace;
 
-
 const FRAME_SIZE: usize = 0x1000;
 pub trait PhysPage: Debug + Send + Sync {
     fn phys_addr(&self) -> PhysAddr;
     fn as_bytes(&self) -> &[u8];
     fn as_mut_bytes(&mut self) -> &mut [u8];
+    fn read_value_atomic(&self, offset: usize) -> usize;
+    fn write_value_atomic(&mut self, offset: usize, value: usize);
 }
 
 pub trait VmIo {
@@ -83,4 +84,8 @@ pub trait VmIo {
         }
         Ok(())
     }
+
+    fn read_value_atomic(&self, offset: VirtAddr) -> PagingResult<usize>;
+
+    fn write_value_atomic(&mut self, offset: VirtAddr, new_val: usize) -> PagingResult<()>;
 }

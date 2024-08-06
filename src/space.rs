@@ -153,10 +153,11 @@ impl<T: PagingIf<Rv64PTE>> VmIo for VmSpace<T> {
         let start_write = false;
         let mut offset = 0usize;
         for (va, area) in self.areas.iter_mut() {
-            if current_addr >= *va && current_addr < area.size() + va {
-                if !area.permission().contains(MappingFlags::WRITE) {
-                    return Err(PagingError::InvalidPermission);
-                }
+            if current_addr >= *va && current_addr < area.size() + *va {
+                // if !area.permission().contains(MappingFlags::WRITE) {
+                //     log::error!("InvalidPermission");
+                //     return Err(PagingError::InvalidPermission);
+                // }
                 let write_len = remain.min(area.size() + va - current_addr);
                 area.write_data(current_addr, &buf[offset..(offset + write_len)]);
                 offset += write_len;
@@ -171,5 +172,26 @@ impl<T: PagingIf<Rv64PTE>> VmIo for VmSpace<T> {
             }
         }
         Err(PagingError::NotMapped)
+    }
+
+    fn read_value_atomic(&self, offset: VirtAddr) -> PagingResult<usize> {
+        let current_addr = offset.as_usize();
+        for (va, area) in self.areas.iter() {
+            if current_addr >= *va && current_addr < area.size() + *va {
+                let v = area.read_value_atomic(current_addr);
+                return Ok(v);
+            }
+        }
+        panic!("read_value_atomic failed, address not found");
+    }
+    fn write_value_atomic(&mut self, offset: VirtAddr, new_val: usize) -> PagingResult<()> {
+        let current_addr = offset.as_usize();
+        for (va, area) in self.areas.iter_mut() {
+            if current_addr >= *va && current_addr < area.size() + *va {
+                area.write_value_atomic(current_addr, new_val);
+                return Ok(());
+            }
+        }
+        panic!("write_value_atomic failed, address not found");
     }
 }
