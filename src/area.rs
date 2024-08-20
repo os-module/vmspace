@@ -131,36 +131,44 @@ impl VmArea {
     pub fn write_data(&mut self, addr: usize, data: &[u8]) {
         let mut current_start_address = addr;
         let mut data = data;
-        for (va, pa) in self.map.iter_mut() {
-            if current_start_address >= *va && current_start_address < *va + FRAME_SIZE {
-                let offset = current_start_address - va;
-                let phy_buf = pa.as_mut_bytes();
-                let w_len = core::cmp::min(phy_buf.len() - offset, data.len());
-                phy_buf[offset..offset + w_len].copy_from_slice(&data[..w_len]);
-                if w_len == data.len() {
-                    return;
-                }
-                data = &data[w_len..];
-                current_start_address = va + FRAME_SIZE;
+        loop {
+            let align_down = current_start_address & !(FRAME_SIZE - 1);
+            let pa = self.map.get_mut(&align_down);
+            if pa.is_none() {
+                break;
             }
+            let pa = pa.unwrap();
+            let offset = current_start_address - align_down;
+            let phy_buf = pa.as_mut_bytes();
+            let w_len = core::cmp::min(phy_buf.len() - offset, data.len());
+            phy_buf[offset..offset + w_len].copy_from_slice(&data[..w_len]);
+            if w_len == data.len() {
+                return;
+            }
+            data = &data[w_len..];
+            current_start_address = align_down + FRAME_SIZE;
         }
     }
 
     pub fn read_data(&self, addr: usize, data: &mut [u8]) {
         let mut start = addr;
         let mut data = data;
-        for (va, pa) in self.map.iter() {
-            if start >= *va && start < *va + FRAME_SIZE {
-                let offset = start - va;
-                let phy_buf = pa.as_bytes();
-                let r_len = core::cmp::min(phy_buf.len() - offset, data.len());
-                data[..r_len].copy_from_slice(&phy_buf[offset..offset + r_len]);
-                if r_len == data.len() {
-                    return;
-                }
-                data = &mut data[r_len..];
-                start = va + FRAME_SIZE;
+        loop {
+            let align_down = start & !(FRAME_SIZE - 1);
+            let pa = self.map.get(&align_down);
+            if pa.is_none() {
+                break;
             }
+            let pa = pa.unwrap();
+            let offset = start - align_down;
+            let phy_buf = pa.as_bytes();
+            let r_len = core::cmp::min(phy_buf.len() - offset, data.len());
+            data[..r_len].copy_from_slice(&phy_buf[offset..offset + r_len]);
+            if r_len == data.len() {
+                return;
+            }
+            data = &mut data[r_len..];
+            start = align_down + FRAME_SIZE;
         }
     }
 
